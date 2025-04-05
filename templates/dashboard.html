@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Select Detection Method</h1>
+
+    <div class="options">
+        <!-- IMAGE UPLOAD -->
+        <div class="option-card">
+            <h2>Image Upload</h2>
+            <form id="imageUploadForm" enctype="multipart/form-data">
+                <input type="file" id="imageInput" name="file" accept="image/*" style="display:none" required>
+                <button type="button" onclick="document.getElementById('imageInput').click();">Choose Image</button>
+                <button type="submit">Upload</button>
+            </form>
+            <div id="imagePreviewContainer" style="margin-top: 10px;">
+                <img id="previewImage" style="max-width: 300px; display: none;">
+            </div>
+            <p id="imageResponse"></p>
+        </div>
+
+        <!-- VIDEO UPLOAD -->
+        <div class="option-card">
+            <h2>Video Upload</h2>
+            <form id="videoUploadForm" enctype="multipart/form-data">
+                <input type="file" id="videoInput" name="file" accept="video/*" style="display:none" required>
+                <button type="button" onclick="document.getElementById('videoInput').click();">Choose Video</button>
+                <button type="submit">Upload</button>
+            </form>
+            <div id="videoPreviewContainer" style="margin-top: 10px;">
+                <video id="previewVideo" controls style="max-width: 300px; display: none;"></video>
+            </div>
+            <p id="videoResponse"></p>
+        </div>
+
+        <!-- LIVE VIDEO RECORDING -->
+        <div class="option-card">
+            <h2>Live Capture</h2>
+            <p>Record a 10-second video for analysis</p>
+            <button onclick="startRecording()">Start Recording</button>
+            <video id="livePreview" autoplay muted style="max-width: 300px; display: none;"></video>
+            <button id="uploadLiveButton" style="display:none">Upload Recorded Video</button>
+            <p id="liveResponse"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Image upload preview and send
+    document.getElementById("imageInput").addEventListener("change", function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.getElementById("previewImage");
+                img.src = e.target.result;
+                img.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    document.getElementById("imageUploadForm").addEventListener("submit", async function(event) {
+        event.preventDefault();
+        const file = document.getElementById("imageInput").files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/upload_image", { method: "POST", body: formData });
+        const result = await res.text();
+        document.getElementById("imageResponse").innerText = result;
+    });
+
+    // Video upload preview and send
+    document.getElementById("videoInput").addEventListener("change", function(event) {
+        const file = event.target.files[0];
+        const url = URL.createObjectURL(file);
+        const video = document.getElementById("previewVideo");
+        video.src = url;
+        video.style.display = "block";
+    });
+
+    document.getElementById("videoUploadForm").addEventListener("submit", async function(event) {
+        event.preventDefault();
+        const file = document.getElementById("videoInput").files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/upload_video", { method: "POST", body: formData });
+        const result = await res.text();
+        document.getElementById("videoResponse").innerText = result;
+    });
+
+    // Live Recording
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    async function startRecording() {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const video = document.getElementById("livePreview");
+        video.srcObject = stream;
+        video.style.display = "block";
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(recordedChunks, { type: "video/webm" });
+            const formData = new FormData();
+            formData.append("file", blob, "live_capture.webm");
+
+            document.getElementById("uploadLiveButton").style.display = "inline-block";
+            document.getElementById("uploadLiveButton").onclick = async () => {
+                const res = await fetch("/record_video", { method: "POST", body: formData });
+                const result = await res.text();
+                document.getElementById("liveResponse").innerText = result;
+            }
+        };
+
+        mediaRecorder.start();
+        setTimeout(() => {
+            mediaRecorder.stop();
+            stream.getTracks().forEach(track => track.stop());
+        }, 10000); // Stop after 10 seconds
+    }
+</script>
+
+{% endblock %}
